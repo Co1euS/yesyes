@@ -103,7 +103,7 @@
     function renderResult(list, room, name) {
       const area = document.getElementById("resultArea");
       if (list.length === 0) {
-        area.innerHTML = `<p style="color:var(--muted);font-size:14px">조회 결과가 없습니다. 호실과 이름을 정확히 입력하세요.</p>`;
+        area.innerHTML = `<p style="font-weight:800;color:var(--good);font-size:15px">벌점이 0점입니다. 계속 유지하세요!</p>`;
         return;
       }
       const good = list.filter((x) => x.type === "good").reduce((s, x) => s + Number(x.score), 0);

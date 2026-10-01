@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const DB_PREFIX = "bmhs_dorm_";
 
 // 서버와 동기화하는 데이터 종류
-const KNOWN_KEYS = ["dinner", "stay", "notices", "free", "points", "repairs"];
+const KNOWN_KEYS = ["dinner", "stay", "notices", "free", "points", "repairs", "_pw"];
 
 // Supabase REST API 호출 헬퍼
 function sb(path, options = {}) {
@@ -230,15 +230,22 @@ function adminPw() {
 // 사감 비밀번호를 서버에 저장 (모든 기기에서 동일하게 적용)
 async function setAdminPw(pw) {
   localStorage.setItem(ADMIN_PW_KEY, pw);
+  cache["_pw"] = [{ pw, resetVersion: "v1" }];
   try {
     await sb("items?category=eq._pw", { method: "DELETE" });
     await sb("items", {
       method: "POST",
-      body: JSON.stringify({ id: 9999999999999, category: "_pw", data: { pw } }),
+      body: JSON.stringify({ id: 9999999999999, category: "_pw", data: { pw, resetVersion: "v1" } }),
     });
   } catch (e) {}
-  cache["_pw"] = [{ pw }];
 }
+
+// 요청에 따라 모든 기기에서 관리자 비밀번호를 1234로 한 번 초기화합니다.
+dbInit(() => {
+  const remotePassword = (cache["_pw"] || [])[0];
+  if (!remotePassword || remotePassword.resetVersion !== "v1") setAdminPw("1234");
+  else localStorage.setItem(ADMIN_PW_KEY, remotePassword.pw || "1234");
+});
 
 function requireAdmin(onOk) {
   if (adminAuthed) return onOk();
