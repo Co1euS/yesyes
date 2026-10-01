@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>공지사항 | 부산기계공업고등학교 기숙사</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/auth.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="logo" href="index.html"><img src="images.png" alt="학교 로고" style="width:24px;height:24px;vertical-align:-6px;border-radius:4px"> 부산기계공업고등학교 기숙사 <span class="badge">커뮤니티</span></a>
+      <nav class="main-nav">
+        <a href="notice.html" class="active">공지사항</a>
+        <a href="free.html">자유게시판</a>
+        <a href="repair.html">시설 수리 요청</a>
+        <a href="points.html">상점/벌점</a>
+        <a href="index.html">석식/잔류 신청</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h1 class="page-title">📢 공지사항</h1>
+    <p class="page-sub">기숙사 운영 및 생활 관련 공지를 확인하세요. (관리자/사감 선생님 전용 작성)</p>
+
+    <div class="board-toolbar">
+      <input type="text" id="searchBox" placeholder="공지 검색...">
+      <button class="btn" id="openWrite">＋ 공지 등록</button>
+    </div>
+
+    <table class="board-table">
+      <thead>
+        <tr><th style="width:70px">번호</th><th>제목</th><th style="width:110px">작성자</th><th style="width:110px">날짜</th></tr>
+      </thead>
+      <tbody id="noticeBody"></tbody>
+    </table>
+  </main>
+
+  <div class="modal-backdrop" id="writeModal">
+    <div class="modal">
+      <h2>공지 등록</h2>
+      <label>제목</label>
+      <input type="text" id="wTitle" placeholder="공지 제목">
+      <label>작성자 (사감/관리자)</label>
+      <input type="text" id="wWriter" placeholder="예: 기숙사 사감실">
+      <label>내용</label>
+      <textarea id="wBody" placeholder="공지 내용을 입력하세요."></textarea>
+      <div class="modal-actions">
+        <button class="btn secondary" id="cancelWrite">취소</button>
+        <button class="btn" id="submitWrite">등록</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="viewModal">
+    <div class="modal post-detail">
+      <h2 id="vTitle"></h2>
+      <p class="meta" id="vMeta"></p>
+      <div class="body" id="vBody"></div>
+      <div class="modal-actions">
+        <button class="btn danger small" id="deletePost">삭제</button>
+        <button class="btn secondary" id="closeView">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    부산기계공업고등학교 기숙사 커뮤니티 · 문의: 기숙사 사감실 (☎ 051-719-0563)
+  </footer>
+
+  <script src="js/common.js"></script>
+  <script>
+    const KEY = "notices";
+    let currentId = null;
+
+    function render() {
+      const q = document.getElementById("searchBox").value.trim().toLowerCase();
+      const list = db(KEY).filter((p) => !q || p.title.toLowerCase().includes(q) || p.body.toLowerCase().includes(q));
+      document.getElementById("noticeBody").innerHTML =
+        list.length === 0
+          ? `<tr><td colspan="4" class="empty">등록된 공지가 없습니다.</td></tr>`
+          : list.map((p, i) => `
+            <tr data-id="${p.id}">
+              <td class="num">${list.length - i}</td>
+              <td><span class="tag notice">공지</span>${escapeHtml(p.title)}</td>
+              <td class="writer">${escapeHtml(p.writer)}</td>
+              <td class="date">${formatDate(p.createdAt)}</td>
+            </tr>`).join("");
+    }
+
+    document.getElementById("noticeBody").addEventListener("click", (e) => {
+      const tr = e.target.closest("tr[data-id]");
+      if (!tr) return;
+      const p = db(KEY).find((x) => String(x.id) === tr.dataset.id);
+      currentId = p.id;
+      document.getElementById("vTitle").textContent = p.title;
+      document.getElementById("vMeta").textContent = `${p.writer} · ${formatDate(p.createdAt)}`;
+      document.getElementById("vBody").textContent = p.body;
+      document.getElementById("viewModal").classList.add("open");
+    });
+
+    document.getElementById("openWrite").onclick = () => requireAdmin(() => document.getElementById("writeModal").classList.add("open"));
+    document.getElementById("cancelWrite").onclick = () => document.getElementById("writeModal").classList.remove("open");
+    document.getElementById("closeView").onclick = () => document.getElementById("viewModal").classList.remove("open");
+
+    document.getElementById("submitWrite").onclick = () => {
+      const title = document.getElementById("wTitle").value.trim();
+      const writer = document.getElementById("wWriter").value.trim();
+      const body = document.getElementById("wBody").value.trim();
+      if (!title || !body) return alert("제목과 내용을 입력하세요.");
+      dbPush(KEY, { title: censorText(title), writer: censorText(writer || "기숙사 사감실"), body: censorText(body) });
+      document.getElementById("wTitle").value = "";
+      document.getElementById("wWriter").value = "";
+      document.getElementById("wBody").value = "";
+      document.getElementById("writeModal").classList.remove("open");
+      render();
+    };
+
+    document.getElementById("deletePost").onclick = () => {
+      requireAdmin(() => {
+        if (!confirm("정말 삭제하시겠습니까?")) return;
+        dbSave(KEY, db(KEY).filter((x) => x.id !== currentId));
+        document.getElementById("viewModal").classList.remove("open");
+        render();
+      });
+    };
+
+    document.getElementById("searchBox").oninput = render;
+    dbOnChange(KEY, render);
+    render();
+  </script>
+</body>
+</html>

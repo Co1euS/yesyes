@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>상점/벌점 | 부산기계공업고등학교 기숙사</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/auth.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="logo" href="index.html"><img src="images.png" alt="학교 로고" style="width:24px;height:24px;vertical-align:-6px;border-radius:4px"> 부산기계공업고등학교 기숙사 <span class="badge">커뮤니티</span></a>
+      <nav class="main-nav">
+        <a href="notice.html">공지사항</a>
+        <a href="free.html">자유게시판</a>
+        <a href="repair.html">시설 수리 요청</a>
+        <a href="points.html" class="active">상점/벌점</a>
+        <a href="index.html">석식/잔류 신청</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h1 class="page-title">🏅 상점 · 벌점 조회</h1>
+    <p class="page-sub">호실과 이름으로 본인의 상벌점 내역을 조회할 수 있습니다.</p>
+
+    <div class="card">
+      <h3 style="margin-bottom:12px">🔍 내 벌점 조회</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input type="text" id="qRoom" placeholder="호실 (예: 3층 302)" style="flex:1;min-width:140px;padding:9px 12px;border:1px solid var(--border);border-radius:8px">
+        <input type="text" id="qName" placeholder="이름" style="flex:1;min-width:120px;padding:9px 12px;border:1px solid var(--border);border-radius:8px">
+        <button class="btn" id="searchPoints">조회</button>
+      </div>
+      <div id="resultArea" style="margin-top:16px"></div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:24px 0 12px;flex-wrap:wrap;gap:10px">
+      <h2 style="font-size:18px">📋 최근 상벌점 내역</h2>
+      <button class="btn secondary" id="openChangePw">🔑 비밀번호 변경</button>
+      <button class="btn" id="openWrite">＋ 등록 (사감 선생님 전용)</button>
+    </div>
+
+    <table class="board-table">
+      <thead>
+        <tr>
+          <th style="width:90px">구분</th>
+          <th style="width:130px">호실</th>
+          <th style="width:100px">이름</th>
+          <th>내용</th>
+          <th style="width:70px">점수</th>
+          <th style="width:110px">날짜</th>
+          <th style="width:80px">관리</th>
+        </tr>
+      </thead>
+      <tbody id="pointBody"></tbody>
+    </table>
+  </main>
+
+  <div class="modal-backdrop" id="writeModal">
+    <div class="modal">
+      <h2>상점/벌점 등록</h2>
+      <label>호실</label>
+      <input type="text" id="wRoom" placeholder="예: 3층 302">
+      <label>이름</label>
+      <input type="text" id="wName" placeholder="예: 김OO">
+      <label>구분</label>
+      <select id="wType">
+        <option value="bad">벌점</option>
+        <option value="good">상점</option>
+      </select>
+      <label>내용</label>
+      <input type="text" id="wReason" placeholder="예: 소등 후 통화">
+      <label>점수 (숫자)</label>
+      <input type="number" id="wScore" min="1" max="100" placeholder="예: 2">
+      <div class="modal-actions">
+        <button class="btn secondary" id="cancelWrite">취소</button>
+        <button class="btn" id="submitWrite">등록</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    부산기계공업고등학교 기숙사 커뮤니티 · 문의: 기숙사 사감실 (☎ 051-719-0563)
+  </footer>
+
+  <script src="js/common.js"></script>
+  <script>
+    const KEY = "points";
+
+    // 누적 벌점 구간: 40점 = 1개월 퇴사, 70점 = 2개월 퇴사, 100점 = 영구 퇴사
+    function stage(total) {
+      if (total >= 100) return { text: "영구 퇴사 대상", color: "var(--danger)" };
+      if (total >= 70) return { text: "2개월 퇴사 대상", color: "var(--danger)" };
+      if (total >= 40) return { text: "1개월 퇴사 대상", color: "#b26a00" };
+      return null;
+    }
+
+    function personRecords(room, name) {
+      return db(KEY).filter((p) => p.room === room && p.name === name);
+    }
+
+    function renderResult(list, room, name) {
+      const area = document.getElementById("resultArea");
+      if (list.length === 0) {
+        area.innerHTML = `<p style="color:var(--muted);font-size:14px">조회 결과가 없습니다. 호실과 이름을 정확히 입력하세요.</p>`;
+        return;
+      }
+      const good = list.filter((x) => x.type === "good").reduce((s, x) => s + Number(x.score), 0);
+      const bad = list.filter((x) => x.type === "bad").reduce((s, x) => s + Number(x.score), 0);
+      const net = bad - good;
+      const st = stage(net);
+      area.innerHTML = `
+        <div class="points-summary" style="margin-bottom:12px">
+          <div class="stat good"><div class="stat-label">상점 합계</div><div class="stat-value">${good}</div></div>
+          <div class="stat bad"><div class="stat-label">벌점 합계</div><div class="stat-value">${bad}</div></div>
+          <div class="stat"><div class="stat-label">누적 벌점 (상점 차감)</div><div class="stat-value">${net}</div></div>
+        </div>
+        ${st ? `<p style="font-weight:800;color:${st.color};margin-bottom:10px">⚠️ 현재 상태: ${st.text}</p>` : ""}
+        ${net === 0 ? `<p style="font-weight:800;color:var(--good);margin-bottom:10px">✅ 벌점이 없습니다.</p>` : ""}
+        <table class="board-table">
+          <thead><tr><th style="width:90px">구분</th><th>내용</th><th style="width:70px">점수</th><th style="width:110px">날짜</th><th style="width:80px">관리</th></tr></thead>
+          <tbody>
+            ${list.map((p) => `<tr>
+              <td><span class="tag ${p.type === "good" ? "good" : "bad"}">${p.type === "good" ? "상점" : "벌점"}</span></td>
+              <td>${escapeHtml(p.reason)}</td>
+              <td style="font-weight:800;color:${p.type === "good" ? "var(--good)" : "var(--danger)"}">${p.type === "good" ? "+" : "-"}${p.score}</td>
+              <td class="date">${formatDate(p.createdAt)}</td>
+              <td><button class="btn secondary" style="padding:4px 10px;font-size:12px" onclick="cancelPoint(${p.id})">취소</button></td>
+            </tr>`).join("")}
+          </tbody>
+        </table>`;
+    }
+
+    function render() {
+      const list = db(KEY);
+      document.getElementById("pointBody").innerHTML =
+        list.length === 0
+          ? `<tr><td colspan="6" class="empty">상벌점 내역이 없습니다.</td></tr>`
+          : list.map((p) => `<tr>
+              <td><span class="tag ${p.type === "good" ? "good" : "bad"}">${p.type === "good" ? "상점" : "벌점"}</span></td>
+              <td>${escapeHtml(p.room)}</td>
+              <td>${escapeHtml(p.name)}</td>
+              <td>${escapeHtml(p.reason)}</td>
+              <td style="font-weight:800;color:${p.type === "good" ? "var(--good)" : "var(--danger)"}">${p.type === "good" ? "+" : "-"}${p.score}</td>
+              <td class="date">${formatDate(p.createdAt)}</td>
+              <td><button class="btn secondary" style="padding:4px 10px;font-size:12px" onclick="cancelPoint(${p.id})">취소</button></td>
+            </tr>`).join("");
+    }
+
+    // 상벌점 취소 (사감 선생님 전용)
+    function cancelPoint(id) {
+      requireAdmin(() => {
+        const item = db(KEY).find((p) => p.id === id);
+        if (!item) return alert("이미 취소되었거나 존재하지 않는 내역입니다.");
+        if (!confirm(`이 내역을 취소하시겠습니까?\n[${item.type === "good" ? "상점" : "벌점"}] ${item.name} / ${item.reason} / ${item.score}점`)) return;
+        dbSave(KEY, db(KEY).filter((p) => p.id !== id));
+        render();
+        const room = document.getElementById("qRoom").value.trim();
+        const name = document.getElementById("qName").value.trim();
+        if (room && name && item.room === room && item.name === name) {
+          renderResult(personRecords(room, name), room, name);
+        }
+      });
+    }
+
+    document.getElementById("searchPoints").onclick = () => {
+      const room = document.getElementById("qRoom").value.trim();
+      const name = document.getElementById("qName").value.trim();
+      if (!room || !name) return alert("호실과 이름을 모두 입력하세요.");
+      renderResult(personRecords(room, name), room, name);
+    };
+    document.getElementById("qName").addEventListener("keydown", (e) => { if (e.key === "Enter") document.getElementById("searchPoints").click(); });
+
+    // 사감 인증
+    document.getElementById("openWrite").onclick = () => requireAdmin(() => document.getElementById("writeModal").classList.add("open"));
+
+    // 사감 비밀번호 변경 (사감 인증 후)
+    document.getElementById("openChangePw").onclick = () => requireAdmin(changeAdminPw);
+
+    document.getElementById("cancelWrite").onclick = () => document.getElementById("writeModal").classList.remove("open");
+    document.getElementById("submitWrite").onclick = () => {
+      const room = document.getElementById("wRoom").value.trim();
+      const name = document.getElementById("wName").value.trim();
+      const type = document.getElementById("wType").value;
+      const reason = document.getElementById("wReason").value.trim();
+      const score = Number(document.getElementById("wScore").value);
+      if (!room || !name || !reason || !score || score < 1) return alert("호실, 이름, 내용, 점수를 올바르게 입력하세요.");
+      dbPush(KEY, { room, name, type, reason, score });
+      ["wRoom", "wName", "wReason", "wScore"].forEach((id) => (document.getElementById(id).value = ""));
+      document.getElementById("writeModal").classList.remove("open");
+      render();
+    };
+
+    dbOnChange(KEY, render);
+    render();
+  </script>
+</body>
+</html>

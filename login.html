@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>로그인 | 부산기계공업고등학교 기숙사</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/auth.js"></script>
+</head>
+<body class="auth-page">
+  <main class="auth-main">
+    <a class="auth-brand" href="login.html">부산기계공업고등학교 기숙사 <span class="badge">커뮤니티</span></a>
+    <section class="card auth-card">
+      <div id="accountSection">
+        <h1 class="page-title">기숙사 커뮤니티 로그인</h1>
+        <p class="page-sub">학교 이메일 계정으로 로그인하거나 새 계정을 만드세요.</p>
+        <div class="auth-tabs">
+          <button class="btn" id="showLogin" type="button">로그인</button>
+          <button class="btn secondary" id="showSignup" type="button">계정 만들기</button>
+        </div>
+        <form id="accountForm">
+          <label for="email">학교 이메일</label>
+          <input id="email" type="email" autocomplete="email" placeholder="아이디@bmt.hs.kr" required>
+          <p class="auth-hint">@bmt.hs.kr로 끝나는 이메일만 사용할 수 있습니다.</p>
+          <label for="password">비밀번호</label>
+          <input id="password" type="password" autocomplete="current-password" minlength="6" placeholder="비밀번호 (6자 이상)" required>
+          <button class="btn auth-submit" id="accountSubmit" type="submit">로그인</button>
+        </form>
+      </div>
+
+      <div id="profileSection" hidden>
+        <h1 class="page-title">학생 프로필 설정</h1>
+        <p class="page-sub">사이트 이용을 위해 학생 정보를 입력해 주세요. 입력한 정보는 로그인한 계정의 프로필에 저장됩니다.</p>
+        <p class="auth-email" id="profileEmail"></p>
+        <form id="profileForm">
+          <label for="room">기숙사 호실</label>
+          <input id="room" type="text" autocomplete="off" placeholder="예: 3층 302호" required>
+          <label for="studentName">이름</label>
+          <input id="studentName" type="text" autocomplete="name" required>
+          <label for="studentCard">학생증 번호</label>
+          <input id="studentCard" type="text" inputmode="numeric" autocomplete="off" required>
+          <label for="studentNumber">학번</label>
+          <input id="studentNumber" type="text" inputmode="numeric" autocomplete="off" required>
+          <button class="btn auth-submit" type="submit">프로필 저장하고 시작하기</button>
+        </form>
+        <button class="auth-signout" id="profileSignout" type="button">다른 계정으로 로그인</button>
+      </div>
+      <p class="auth-error" id="authMessage" role="status" aria-live="polite"></p>
+    </section>
+    <p class="auth-footer">부산기계공업고등학교 기숙사 커뮤니티</p>
+  </main>
+
+  <script>
+    const accountSection = document.getElementById("accountSection");
+    const profileSection = document.getElementById("profileSection");
+    const message = document.getElementById("authMessage");
+    const form = document.getElementById("accountForm");
+    let accountMode = "login";
+
+    function showMessage(text, isError = true) {
+      message.textContent = text;
+      message.classList.toggle("success", !isError);
+    }
+
+    function destination() {
+      const next = new URLSearchParams(location.search).get("next");
+      if (!next || !next.startsWith("/") || next.startsWith("//")) return "index.html";
+      return next;
+    }
+
+    function setMode(mode) {
+      accountMode = mode;
+      const login = mode === "login";
+      document.getElementById("showLogin").className = login ? "btn" : "btn secondary";
+      document.getElementById("showSignup").className = login ? "btn secondary" : "btn";
+      document.getElementById("accountSubmit").textContent = login ? "로그인" : "계정 만들기";
+      document.getElementById("password").autocomplete = login ? "current-password" : "new-password";
+      showMessage("");
+    }
+
+    async function showProfile(user) {
+      accountSection.hidden = true;
+      profileSection.hidden = false;
+      document.getElementById("profileEmail").textContent = user.email || "";
+      const profile = user.user_metadata || {};
+      document.getElementById("room").value = profile.room || "";
+      document.getElementById("studentName").value = profile.name || "";
+      document.getElementById("studentCard").value = profile.studentCard || "";
+      document.getElementById("studentNumber").value = profile.studentNumber || "";
+      if (StudentAuth.hasProfile(user) && new URLSearchParams(location.search).get("setup") !== "1") {
+        location.replace(destination());
+      }
+    }
+
+    document.getElementById("showLogin").onclick = () => setMode("login");
+    document.getElementById("showSignup").onclick = () => setMode("signup");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const submit = document.getElementById("accountSubmit");
+      submit.disabled = true;
+      showMessage("");
+      try {
+        if (!StudentAuth.isSchoolEmail(email)) throw new Error("학교 이메일(@bmt.hs.kr)만 사용할 수 있습니다.");
+        if (accountMode === "signup") {
+          const result = await StudentAuth.signUp(email, password);
+          if (result.access_token && StudentAuth.isEmailVerified(result.user)) {
+            await showProfile(result.user || await StudentAuth.restore());
+          } else {
+            setMode("login");
+            showMessage("가입 요청을 보냈습니다. 메일함의 인증 링크를 누른 뒤 로그인해 주세요. 메일이 오지 않으면 스팸함도 확인하세요.", false);
+          }
+        } else {
+          const user = await StudentAuth.signIn(email, password);
+          if (!StudentAuth.isSchoolEmail(user.email)) throw new Error("학교 이메일(@bmt.hs.kr) 계정만 사용할 수 있습니다.");
+          if (StudentAuth.hasProfile(user)) location.replace(destination());
+          else await showProfile(user);
+        }
+      } catch (error) {
+        const raw = String(error.message || "");
+        const lower = raw.toLowerCase();
+        if (lower.includes("invalid login credentials")) showMessage("이메일 또는 비밀번호가 올바르지 않습니다.");
+        else if (lower.includes("email not confirmed")) showMessage("이메일 인증이 완료되지 않았습니다. 메일함의 인증 링크를 확인하세요.");
+        else if (lower.includes("user already registered")) showMessage("이미 가입된 이메일입니다. 로그인하거나 인증 메일을 확인하세요.");
+        else if (lower.includes("password should be at least") || lower.includes("password must be")) showMessage("비밀번호가 너무 짧습니다. 6자 이상 입력하세요.");
+        else showMessage(raw || "로그인 중 오류가 발생했습니다.");
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    document.getElementById("profileForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = event.currentTarget.querySelector("button[type=submit]");
+      submit.disabled = true;
+      showMessage("");
+      try {
+        const profile = {
+          room: document.getElementById("room").value,
+          name: document.getElementById("studentName").value,
+          studentCard: document.getElementById("studentCard").value,
+          studentNumber: document.getElementById("studentNumber").value,
+        };
+        await StudentAuth.saveProfile(profile);
+        location.replace(destination());
+      } catch (error) {
+        showMessage(error.message || "프로필을 저장하지 못했습니다.");
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    document.getElementById("profileSignout").onclick = StudentAuth.signOut;
+
+    StudentAuth.restore().then((user) => {
+      if (!user) return;
+      const mustSetUp = new URLSearchParams(location.search).get("setup") === "1";
+      if (StudentAuth.hasProfile(user) && !mustSetUp) location.replace(destination());
+      else showProfile(user);
+    });
+  </script>
+</body>
+</html>
